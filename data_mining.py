@@ -1,18 +1,22 @@
 import sqlite3
-from math import factorial
 import itertools
 from collections import defaultdict
-#################################################################################
-class Item_Sets :
-    def __init__(self , db_file_name) :
-        self.transactions = self.initialize_transactions(db_file_name)
-        self.unique_transaction = self.initialize_unique_transaction()
 
-    #avoir  les transaction d'une seule table dans la bdd
+class Aporior:
+    def __init__(self  ,min_sup ,min_conf , db_file_name ):
+        self.min_sup = min_sup
+        self.min_conf = min_conf
+        self.frquent_itemsets = {}
+        self.transactions = self.initialize_transactions(db_file_name)
+        #print(self.transactions)
+        self.unique_transaction = self.initialize_unique_transaction()
+        #print(self.unique_transaction)
+
     def initialize_transactions(self,db_file_name) :
-        conn = sqlite3.connect(db_file_name)
-        cur  = conn.cursor()
-        data= cur.execute("select transactions from  data_table"+input("PLEASE: Enter the data_table # from (1->4)  : ")).fetchall()
+        with sqlite3.connect(db_file_name) as conn:
+            cur  = conn.cursor()
+            data= cur.execute("select transactions from  data_table1").fetchall()
+        #print(data)
         return data
 
     #Histogamme des items dans le dataset
@@ -31,36 +35,36 @@ class Item_Sets :
         for item,sup_count in self.unique_transaction.items() :
             print(f"item : {item} , sup_count : {sup_count} ")
         print("_________________________\n")
-################################END Of The Class###################################
-######################################################################################
 
-class Aporior (Item_Sets):
-    def __init__(self  ,min_sup ,min_conf , db_file_name ):
-       super().__init__(db_file_name)
-       self.min_sup = min_sup
-       self.min_conf = min_conf
-       self.frquent_itemsets = {}
-       self.canditates = []
-
-    def Aporior_algorithm(self ) :
+    def Aporior_algorithm(self) :
         L = []
         for char in self.unique_transaction.keys() :
-                if self.unique_transaction[char] >=self.min_sup :
-                    self.frquent_itemsets[char]={"sup_count" : self.unique_transaction[char]}
+                if self.unique_transaction[char] >=self.min_sup[0] :
+                    #self.frquent_itemsets[char]={"sup_count" : self.unique_transaction[char]}
                     L.append(char)  
-        #print(f"\nL -> {L}\n")    
-        while L != [] :
-            #print(f"\nL -> {L}\n")
+        while L != []:
+            for i in range( len(self.min_sup)-1):
+                print(f"database {i+2}")
+                with sqlite3.connect(db) as conn:
+                    cur  = conn.cursor()
+                    nt_transactions = [i[0] for i in cur.execute(f"SELECT transactions from data_table{i+2}").fetchall()]
+                    print(f"nt_transactions -> {nt_transactions}")
+                    L2 = []
+                    for itemset in L:
+                        counter = 0
+                        for tr in nt_transactions:
+                            if itemset in tr:
+                                counter+=1
+                            #print(f' tr {tr}| itermset : {itemset}  -> counter : {counter} | support : {self.min_sup[i+1]} | take it : {counter >=self.min_sup[i+1]}')
+                        if counter >=self.min_sup[i+1]:
+                            self.frquent_itemsets[itemset] ={"sup_count" : 1 }  
+                            L2.append(itemset)
+                L = L2
+                print(f"new L -> {L}")
             C = apriori_gen(L)
-            #print(f"\nC -> {C}\n")
-            self.canditates.append(C)
             L = []
-            for transaction in C :
-                frequent,sup_count = is_frequent(self.transactions,transaction,self.min_sup) 
-                if frequent :                   
-                    self.frquent_itemsets[transaction] ={"sup_count" : sup_count }                  
-                    L.append(transaction)
-
+            print(f"L -> {L}")
+        print(f"last frequent itemsets : {self.frquent_itemsets.keys()}")
     def _close(self) :
         list1 = []
         list2 = []
@@ -88,7 +92,7 @@ class Aporior (Item_Sets):
         association_rules_data = defaultdict(list)
         item_sets = sorted(self.frquent_itemsets.keys(), key=len, reverse=True)
         closed = [item for item in item_sets if self.frquent_itemsets[item]['closed']]
-        for item in self.frquent_itemsets.keys():
+        for item in closed:
             if len(item) > 1 :
                 item_subsets = all_subsets(item)
                 next(item_subsets)
@@ -100,21 +104,24 @@ class Aporior (Item_Sets):
                     association_rules_data[item].append(conf_data(item,subset ,self.frquent_itemsets[item]['sup_count'] ,conf ,self.min_conf ,conf>=self.min_conf ))
         return association_rules_data
 
-    def display_data(self):
-        super().display_data()
+    def display_all_data(self):
+        self.display_data()
         print("Min_Support = {} .\n".format(self.min_sup))
         items = sorted(self.frquent_itemsets.keys(),key = len )
         for item in items:
             if self.frquent_itemsets[item]["closed"]:
                 print("SET = {} : SUP = {} >= min_sup({}) ".format(set(item),self.frquent_itemsets[item]["sup_count"],self.min_sup))
         write_association_rules(self.association_rules()) 
-############################### END OF THE CLASS ####################################
-######################################################################################
+
 def all_subsets(ss):
   return itertools.chain(*map(lambda x: itertools.combinations(ss, x), range(0, len(ss)+1)))
 #////////////////////////////////////////////////////////////////////////////////////
 def is_frequent(item_sets , canditate , min_sup ) :
     count = 0
+    #print("here")
+    #print(item_sets,canditate,min_sup)
+    #print(canditate)
+    #print(min_sup)
     for transaction in item_sets :
         if set(canditate) <= set(transaction[0] ) :
             count += 1
@@ -156,14 +163,36 @@ def write_association_rules(association_rules_data, filename='associations.txt')
             file.write('______________________________________________\n')
 
 def conf_data(item , subset ,item_sup , conf , min_conf , case ) :
-    p1 = ''.join(['{} ^ '.format(char) for char in subset[:-1]])
-    p1 += '{}'.format(subset[-1])
+    p1 = ''.join(['{} ^ '.format(char) for char in subset[:-1]])+'{}'.format(subset[-1])
     p2_items = sorted(set(item)-set(subset))
-    p2 = ''.join(['{} ^ '.format(char) for char in p2_items[:-1]])
-    p2 += '{}'.format(p2_items[-1])
+    p2 = ''.join(['{} ^ '.format(char) for char in p2_items[:-1]])+'{}'.format(p2_items[-1])
     return '\tR: {} --> {} \t\t\n'.format(p1,p2),'\tConfidence = SC({})/SC({}) = {} / {} = {}% {} min_conf({}%) \n'.format(item,''.join(subset),item_sup,item_sup/conf,conf*100,'>=' if case else '<',min_conf*100),'\tR is Selected.\n' if case else '\tR is Rejected.\n'
-#////////////////////////////////////////////////////////////////////////////////////
-obj = Aporior(2,0.4,"training_datatset.db")
+
+
+
+db="training_datatset.db"
+with sqlite3.connect(db) as conn:
+    print("__________Database infos_________________\n")
+    cur  = conn.cursor()
+    num_of_tables = cur.execute("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name like '%data_table%'").fetchall()[0][0]
+    data = [cur.execute(f"select count(transactions) from  data_table{i+1}").fetchall()[0][0] for i in range(num_of_tables)]
+    for i,display in enumerate(data):
+        print(f"number of transactions in table n:{i+1} -> {display}")
+    print(f"*total transactiosn in the database -> {sum(data)}")
+    print("_________________________________________\n")
+
+
+table_number = num_of_tables+1
+while table_number >num_of_tables:
+    try:
+        table_number=int(input("select the number of tables you want to use : "))
+    except:
+        table_number = num_of_tables+1
+
+
+minsupi=[int(input(f"enter the min sup fot the table {i+1} : ")) for i in range(table_number)]
+#APPRIOR(NUM OF TABLES , LIST OF SUP FOR EACH ONE, CONFIDENCE , DB)
+obj = Aporior(minsupi,0.4,db)
 obj.Aporior_algorithm()
 obj._close()
-obj.display_data()
+obj.display_all_data()

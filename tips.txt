@@ -1,0 +1,9 @@
+pour trouver la fermeture : on compare le n-generateur avec n-lesgénérateurs qui apparaissent autant de fois ou plus
+si le nombre d'apparition du n-générateur  avec l'autre = nombre d'apparition du n-gélératuer , on le prends dans la fermeture
+
+exemple ->
+a 4
+b 3
+c 5
+d 3
+pour construire la fermeture de a : on considére c uniquement ,si count(ac) == count(a) alors ac est la fermeture de a , sinon a est la fermeture de a
